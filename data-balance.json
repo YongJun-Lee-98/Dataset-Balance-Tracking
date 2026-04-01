@@ -1,0 +1,22 @@
+{
+  "hand timining": {
+    "0": 14,
+    "5": 14,
+    "10": 12,
+    "20": 7,
+    "30": 9
+  },
+  "clothes": {
+    "black": 12,
+    "denim jacket": 10,
+    "red": 8,
+    "white shirt": 12,
+    "gray": 14
+  },
+  "hand type": {
+    "fast two hand": 14,
+    "left to two hand": 14,
+    "right to two hand": 14,
+    "left & right to two hand": 14
+  }
+}

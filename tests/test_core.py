@@ -39,6 +39,65 @@ class ProjectStateTests(unittest.TestCase):
         lowest_ids = state.get_category(category.id).lowest_item_ids()
         self.assertEqual(lowest_ids, {bird.id})
 
+    def test_below_average_items_include_ties(self) -> None:
+        state = ProjectState()
+        category = state.add_category("동물")
+        cat = state.add_subcategory(category.id, "고양이")
+        dog = state.add_subcategory(category.id, "강아지")
+        bird = state.add_subcategory(category.id, "새")
+
+        state.increment_subcategory(category.id, bird.id)
+        state.increment_subcategory(category.id, bird.id)
+
+        below_average_ids = state.get_category(category.id).below_average_item_ids()
+        self.assertEqual(below_average_ids, {cat.id, dog.id})
+
+    def test_category_total_count_is_sum_of_subcategories(self) -> None:
+        state = ProjectState()
+        category = state.add_category("동물")
+        cat = state.add_subcategory(category.id, "고양이")
+        dog = state.add_subcategory(category.id, "강아지")
+
+        state.increment_subcategory(category.id, cat.id)
+        state.increment_subcategory(category.id, dog.id)
+        state.increment_subcategory(category.id, dog.id)
+
+        self.assertEqual(state.get_category(category.id).total_count(), 3)
+
+    def test_unbalanced_category_ids_use_most_common_total(self) -> None:
+        state = ProjectState()
+        animals = state.add_category("동물")
+        vehicles = state.add_category("차량")
+        plants = state.add_category("식물")
+
+        cat = state.add_subcategory(animals.id, "고양이")
+        car = state.add_subcategory(vehicles.id, "승용차")
+        tree = state.add_subcategory(plants.id, "나무")
+
+        state.increment_subcategory(animals.id, cat.id)
+        state.increment_subcategory(animals.id, cat.id)
+        state.increment_subcategory(vehicles.id, car.id)
+        state.increment_subcategory(vehicles.id, car.id)
+        state.increment_subcategory(plants.id, tree.id)
+
+        self.assertEqual(state.balance_target_total(), 2)
+        self.assertEqual(state.unbalanced_category_ids(), {plants.id})
+
+    def test_unbalanced_category_ids_highlight_all_when_no_common_total(self) -> None:
+        state = ProjectState()
+        animals = state.add_category("동물")
+        vehicles = state.add_category("차량")
+
+        cat = state.add_subcategory(animals.id, "고양이")
+        car = state.add_subcategory(vehicles.id, "승용차")
+
+        state.increment_subcategory(animals.id, cat.id)
+        state.increment_subcategory(animals.id, cat.id)
+        state.increment_subcategory(vehicles.id, car.id)
+
+        self.assertIsNone(state.balance_target_total())
+        self.assertEqual(state.unbalanced_category_ids(), {animals.id, vehicles.id})
+
     def test_decrement_never_goes_below_zero(self) -> None:
         state = ProjectState()
         category = state.add_category("차량")

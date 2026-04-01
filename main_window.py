@@ -115,6 +115,10 @@ class MainWindow(QMainWindow):
         self.current_category_title.setObjectName("panelTitle")
         layout.addWidget(self.current_category_title)
 
+        self.current_category_summary_label = QLabel("Select a category to see total count.", tab)
+        self.current_category_summary_label.setObjectName("hintLabel")
+        layout.addWidget(self.current_category_summary_label)
+
         self.empty_state_label = QLabel("No subcategories yet. Add one to start tracking.", tab)
         self.empty_state_label.setObjectName("hintLabel")
         layout.addWidget(self.empty_state_label)
@@ -339,6 +343,9 @@ class MainWindow(QMainWindow):
 
     def refresh_category_list(self) -> None:
         selected_id = self.state.selected_category_id
+        unbalanced_ids = self.state.unbalanced_category_ids()
+        category_totals = self.state.category_total_counts()
+        target_total = self.state.balance_target_total()
 
         self.category_list.blockSignals(True)
         self.category_list.clear()
@@ -347,6 +354,18 @@ class MainWindow(QMainWindow):
             item = QListWidgetItem(category.name)
             item.setData(Qt.ItemDataRole.UserRole, category.id)
             item.setForeground(QColor("#21314b"))
+            total_count = category_totals.get(category.id, category.total_count())
+            has_total_mismatch = category.id in unbalanced_ids
+            item.setToolTip(
+                self._build_category_total_message(
+                    total_count=total_count,
+                    has_total_mismatch=has_total_mismatch,
+                    target_total=target_total,
+                )
+            )
+            if has_total_mismatch:
+                item.setForeground(QColor("#b42318"))
+                item.setBackground(QColor("#fdecec"))
             self.category_list.addItem(item)
             if category.id == selected_id:
                 selected_row = row
@@ -362,16 +381,25 @@ class MainWindow(QMainWindow):
     def refresh_subcategory_table(self) -> None:
         category = self.state.get_selected_category()
         scroll_value = self.subcategory_table.verticalScrollBar().value()
+        unbalanced_ids = self.state.unbalanced_category_ids()
+        category_totals = self.state.category_total_counts()
+        target_total = self.state.balance_target_total()
         self.subcategory_table.setRowCount(0)
 
         if category is None:
             self.current_category_title.setText("Select a category")
+            self._update_current_category_balance_summary()
             self.empty_state_label.setText("Create a category first, then add subcategories.")
             self.empty_state_label.setVisible(True)
             self.subcategory_table.setDisabled(True)
             return
 
         self.current_category_title.setText(category.name)
+        self._update_current_category_balance_summary(
+            total_count=category_totals.get(category.id, category.total_count()),
+            has_total_mismatch=category.id in unbalanced_ids,
+            target_total=target_total,
+        )
         self.subcategory_table.setDisabled(False)
 
         if not category.items:
@@ -381,11 +409,13 @@ class MainWindow(QMainWindow):
 
         self.empty_state_label.setVisible(False)
         lowest_ids = category.lowest_item_ids()
+        below_average_ids = category.below_average_item_ids()
         self.subcategory_table.setRowCount(len(category.items))
 
         for row, item in enumerate(category.items):
             self.subcategory_table.setRowHeight(row, 48)
             is_lowest = item.id in lowest_ids
+            is_below_average = item.id in below_average_ids
 
             name_item = QTableWidgetItem(item.name)
             name_item.setFlags(Qt.ItemFlag.ItemIsEnabled)
@@ -394,13 +424,19 @@ class MainWindow(QMainWindow):
                 Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter
             )
             count_item.setFlags(Qt.ItemFlag.ItemIsEnabled)
-            badge_item = QTableWidgetItem("LOWEST" if is_lowest else "")
+            badge_item = QTableWidgetItem(self._build_status_text(is_lowest, is_below_average))
             badge_item.setTextAlignment(
                 Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter
             )
             badge_item.setFlags(Qt.ItemFlag.ItemIsEnabled)
 
-            self._apply_lowest_style(name_item, count_item, badge_item, is_lowest)
+            self._apply_status_style(
+                name_item,
+                count_item,
+                badge_item,
+                is_lowest=is_lowest,
+                is_below_average=is_below_average,
+            )
             self.subcategory_table.setItem(row, 0, name_item)
             self.subcategory_table.setItem(row, 1, count_item)
             self.subcategory_table.setCellWidget(
@@ -454,15 +490,24 @@ class MainWindow(QMainWindow):
 
     def refresh_all_items_table(self) -> None:
         scroll_value = self.all_items_table.verticalScrollBar().value()
+        unbalanced_ids = self.state.unbalanced_category_ids()
+        category_totals = self.state.category_total_counts()
+        target_total = self.state.balance_target_total()
         self.all_items_table.setRowCount(0)
 
         if not self.state.categories:
             self.all_items_hint_label.setText("Create a category first to see the full hierarchy.")
             return
 
-        self.all_items_hint_label.setText(
-            "Double-click a row to jump back to that category."
-        )
+        hint_text = "Double-click a row to jump back to that category."
+        if unbalanced_ids:
+            mismatch_text = "Red-highlighted categories have mismatched total counts."
+            if target_total is not None:
+                mismatch_text = (
+                    f"Red-highlighted categories differ from the expected total count ({target_total})."
+                )
+            hint_text = f"{mismatch_text} {hint_text}"
+        self.all_items_hint_label.setText(hint_text)
 
         total_rows = sum(max(1, len(category.items)) for category in self.state.categories)
         self.all_items_table.setRowCount(total_rows)
@@ -470,6 +515,9 @@ class MainWindow(QMainWindow):
         row = 0
         for category in self.state.categories:
             lowest_ids = category.lowest_item_ids()
+            below_average_ids = category.below_average_item_ids()
+            has_total_mismatch = category.id in unbalanced_ids
+            total_count = category_totals.get(category.id, category.total_count())
 
             if not category.items:
                 self._set_overview_row(
@@ -479,13 +527,23 @@ class MainWindow(QMainWindow):
                     item_id=None,
                     subcategory_name="—",
                     count_text="—",
-                    status_text="No subcategories",
+                    status_text=self._build_status_text(
+                        is_lowest=False,
+                        is_below_average=False,
+                        has_total_mismatch=has_total_mismatch,
+                        empty_text="No subcategories",
+                    ),
+                    has_total_mismatch=has_total_mismatch,
+                    total_count=total_count,
+                    target_total=target_total,
                     muted=True,
                 )
                 row += 1
                 continue
 
             for item in category.items:
+                is_lowest = item.id in lowest_ids
+                is_below_average = item.id in below_average_ids
                 self._set_overview_row(
                     row=row,
                     category_id=category.id,
@@ -493,12 +551,78 @@ class MainWindow(QMainWindow):
                     item_id=item.id,
                     subcategory_name=item.name,
                     count_text=str(item.count),
-                    status_text="LOWEST" if item.id in lowest_ids else "",
-                    is_lowest=item.id in lowest_ids,
+                    status_text=self._build_status_text(
+                        is_lowest=is_lowest,
+                        is_below_average=is_below_average,
+                        has_total_mismatch=has_total_mismatch,
+                    ),
+                    has_total_mismatch=has_total_mismatch,
+                    total_count=total_count,
+                    target_total=target_total,
+                    is_lowest=is_lowest,
+                    is_below_average=is_below_average,
                 )
                 row += 1
 
         self.all_items_table.verticalScrollBar().setValue(scroll_value)
+
+    def _build_category_total_message(
+        self,
+        total_count: int | None,
+        has_total_mismatch: bool,
+        target_total: int | None,
+    ) -> str:
+        if total_count is None:
+            return "Select a category to see total count."
+        if has_total_mismatch:
+            if target_total is None:
+                return f"Total count: {total_count} | balance mismatch"
+            return f"Total count: {total_count} | expected total: {target_total}"
+        if target_total is None:
+            return f"Total count: {total_count} | balanced"
+        return f"Total count: {total_count} | balanced (target: {target_total})"
+
+    def _update_current_category_balance_summary(
+        self,
+        total_count: int | None = None,
+        has_total_mismatch: bool = False,
+        target_total: int | None = None,
+    ) -> None:
+        self.current_category_summary_label.setText(
+            self._build_category_total_message(
+                total_count=total_count,
+                has_total_mismatch=has_total_mismatch,
+                target_total=target_total,
+            )
+        )
+
+        title_color = "#b42318" if has_total_mismatch else "#24324a"
+        summary_color = "#b42318" if has_total_mismatch else "#6a778b"
+        summary_weight = "600" if has_total_mismatch else "400"
+        self.current_category_title.setStyleSheet(
+            f"font-size: 22px; font-weight: 700; color: {title_color};"
+        )
+        self.current_category_summary_label.setStyleSheet(
+            f"color: {summary_color}; font-size: 13px; font-weight: {summary_weight};"
+        )
+
+    def _build_status_text(
+        self,
+        is_lowest: bool,
+        is_below_average: bool,
+        has_total_mismatch: bool = False,
+        empty_text: str = "",
+    ) -> str:
+        status_parts: list[str] = []
+        if has_total_mismatch:
+            status_parts.append("TOTAL MISMATCH")
+        if is_lowest:
+            status_parts.append("LOWEST")
+        if is_below_average:
+            status_parts.append("BELOW AVG")
+        if not status_parts:
+            return empty_text
+        return " / ".join(status_parts)
 
     def _set_overview_row(
         self,
@@ -509,7 +633,11 @@ class MainWindow(QMainWindow):
         subcategory_name: str,
         count_text: str,
         status_text: str,
+        has_total_mismatch: bool = False,
+        total_count: int | None = None,
+        target_total: int | None = None,
         is_lowest: bool = False,
+        is_below_average: bool = False,
         muted: bool = False,
     ) -> None:
         category_item = QTableWidgetItem(category_name)
@@ -526,6 +654,14 @@ class MainWindow(QMainWindow):
             item.setFlags(Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable)
             item.setForeground(QColor("#21314b"))
 
+        tooltip_text = self._build_category_total_message(
+            total_count=total_count,
+            has_total_mismatch=has_total_mismatch,
+            target_total=target_total,
+        )
+        category_item.setToolTip(tooltip_text)
+        status_item.setToolTip(tooltip_text)
+
         if muted:
             muted_color = QColor("#7a8799")
             subcategory_item.setForeground(muted_color)
@@ -540,6 +676,22 @@ class MainWindow(QMainWindow):
                 item.setForeground(strong_color)
             status_item.setBackground(QColor("#ffe29a"))
             status_item.setForeground(strong_color)
+        elif is_below_average:
+            status_item.setBackground(QColor("#dbeafe"))
+            status_item.setForeground(QColor("#1d4ed8"))
+
+        if has_total_mismatch:
+            mismatch_background = QColor("#fdecec")
+            mismatch_color = QColor("#b42318")
+            category_item.setBackground(mismatch_background)
+            category_item.setForeground(mismatch_color)
+            category_font = QFont()
+            category_font.setBold(True)
+            category_item.setFont(category_font)
+
+            if not is_lowest and not is_below_average:
+                status_item.setBackground(mismatch_background)
+                status_item.setForeground(mismatch_color)
 
         self.all_items_table.setItem(row, 0, category_item)
         self.all_items_table.setItem(row, 1, subcategory_item)
@@ -578,12 +730,13 @@ class MainWindow(QMainWindow):
         item.setFlags(Qt.ItemFlag.ItemIsEnabled)
         return item
 
-    def _apply_lowest_style(
+    def _apply_status_style(
         self,
         name_item: QTableWidgetItem,
         count_item: QTableWidgetItem,
         badge_item: QTableWidgetItem,
         is_lowest: bool,
+        is_below_average: bool,
     ) -> None:
         count_font = QFont()
         count_font.setBold(True)
@@ -593,21 +746,30 @@ class MainWindow(QMainWindow):
         count_item.setForeground(default_text_color)
         badge_item.setForeground(default_text_color)
 
-        if not is_lowest:
+        if not is_lowest and not is_below_average:
             return
 
-        row_background = QColor("#fff4ce")
-        name_item.setBackground(row_background)
-        count_item.setBackground(row_background)
-        badge_item.setBackground(QColor("#ffe29a"))
+        badge_font = QFont()
+        badge_font.setBold(True)
+        badge_item.setFont(badge_font)
 
-        strong_color = QColor("#7b5200")
-        name_font = QFont()
-        name_font.setBold(True)
-        name_item.setFont(name_font)
-        name_item.setForeground(strong_color)
-        count_item.setForeground(strong_color)
-        badge_item.setForeground(strong_color)
+        if is_lowest:
+            row_background = QColor("#fff4ce")
+            name_item.setBackground(row_background)
+            count_item.setBackground(row_background)
+            badge_item.setBackground(QColor("#ffe29a"))
+
+            strong_color = QColor("#7b5200")
+            name_font = QFont()
+            name_font.setBold(True)
+            name_item.setFont(name_font)
+            name_item.setForeground(strong_color)
+            count_item.setForeground(strong_color)
+            badge_item.setForeground(strong_color)
+            return
+
+        badge_item.setBackground(QColor("#dbeafe"))
+        badge_item.setForeground(QColor("#1d4ed8"))
 
     def _build_table_button(
         self,

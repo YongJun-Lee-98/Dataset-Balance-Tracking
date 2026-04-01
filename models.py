@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import Counter
 from dataclasses import dataclass, field
 from typing import Any
 from uuid import uuid4
@@ -70,6 +71,20 @@ class Category:
             return set()
         minimum = min(item.count for item in self.items)
         return {item.id for item in self.items if item.count == minimum}
+
+    def average_count(self) -> float:
+        if not self.items:
+            return 0.0
+        return sum(item.count for item in self.items) / len(self.items)
+
+    def below_average_item_ids(self) -> set[str]:
+        if not self.items:
+            return set()
+        average = self.average_count()
+        return {item.id for item in self.items if item.count < average}
+
+    def total_count(self) -> int:
+        return sum(item.count for item in self.items)
 
     def to_simple_mapping(self) -> dict[str, int]:
         return {item.name: item.count for item in self.items}
@@ -198,6 +213,42 @@ class ProjectState:
         if changed:
             self.mark_dirty()
         return item.count
+
+    def category_total_counts(self) -> dict[str, int]:
+        return {category.id: category.total_count() for category in self.categories}
+
+    def balance_target_total(self) -> int | None:
+        if not self.categories:
+            return None
+
+        totals = [category.total_count() for category in self.categories]
+        unique_totals = set(totals)
+        if len(unique_totals) == 1:
+            return totals[0]
+
+        frequencies = Counter(totals)
+        highest_frequency = frequencies.most_common(1)[0][1]
+        candidate_totals = {
+            total_count
+            for total_count, frequency in frequencies.items()
+            if frequency == highest_frequency
+        }
+        if len(candidate_totals) != 1:
+            return None
+        return candidate_totals.pop()
+
+    def unbalanced_category_ids(self) -> set[str]:
+        if len(self.categories) < 2:
+            return set()
+
+        target_total = self.balance_target_total()
+        if target_total is None:
+            return {category.id for category in self.categories}
+        return {
+            category.id
+            for category in self.categories
+            if category.total_count() != target_total
+        }
 
     def to_simple_json(self) -> SimpleJson:
         return {category.name: category.to_simple_mapping() for category in self.categories}
