@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "data-collection-balance-manager"
+version = "0.1.0"
+description = "PySide6 desktop GUI for tracking balanced data collection counts."
+requires-python = ">=3.11"
+dependencies = ["PySide6>=6.7"]
+
+[project.scripts]
+data-balance-tracking = "app:main"
+
+[tool.setuptools]
+py-modules = [
+  "app",
+  "main_window",
+  "models",
+  "storage",
+  "clipboard_service",
+  "validators",
+  "dialogs",
+]
