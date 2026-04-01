@@ -188,10 +188,16 @@ class MainWindow(QMainWindow):
                 background: #fbfcff;
             }
             QListWidget::item {
+                color: #21314b;
+                background: transparent;
                 padding: 8px 10px;
                 border-radius: 8px;
             }
-            QListWidget::item:selected {
+            QListWidget::item:alternate {
+                background: #f5f8fd;
+            }
+            QListWidget::item:selected:active,
+            QListWidget::item:selected:!active {
                 background: #d7e8ff;
                 color: #173b72;
             }
@@ -199,7 +205,17 @@ class MainWindow(QMainWindow):
                 border: 1px solid #d9dde7;
                 border-radius: 10px;
                 background: #ffffff;
+                color: #21314b;
                 gridline-color: transparent;
+            }
+            QTableWidget::item {
+                color: #21314b;
+                background: #ffffff;
+            }
+            QTableWidget::item:selected:active,
+            QTableWidget::item:selected:!active {
+                background: #d7e8ff;
+                color: #173b72;
             }
             QHeaderView::section {
                 background: #eef2f7;
@@ -259,6 +275,7 @@ class MainWindow(QMainWindow):
         for row, category in enumerate(self.state.categories):
             item = QListWidgetItem(category.name)
             item.setData(Qt.ItemDataRole.UserRole, category.id)
+            item.setForeground(QColor("#21314b"))
             self.category_list.addItem(item)
             if category.id == selected_id:
                 selected_row = row
@@ -370,6 +387,10 @@ class MainWindow(QMainWindow):
         count_font = QFont()
         count_font.setBold(True)
         count_item.setFont(count_font)
+        default_text_color = QColor("#21314b")
+        name_item.setForeground(default_text_color)
+        count_item.setForeground(default_text_color)
+        badge_item.setForeground(default_text_color)
 
         if not is_lowest:
             return
