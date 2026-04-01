@@ -9,6 +9,7 @@ from PySide6.QtWidgets import (
     QAbstractItemView,
     QFileDialog,
     QFrame,
+    QHeaderView,
     QHBoxLayout,
     QLabel,
     QListWidget,
@@ -19,11 +20,11 @@ from PySide6.QtWidgets import (
     QSizePolicy,
     QSplitter,
     QStatusBar,
+    QTabWidget,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
     QWidget,
-    QHeaderView,
 )
 
 from clipboard_service import copy_text_to_clipboard
@@ -98,15 +99,27 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(12)
 
-        self.current_category_title = QLabel("Select a category", frame)
+        self.right_tabs = QTabWidget(frame)
+        self.right_tabs.addTab(self._build_current_category_tab(), "Current Category")
+        self.right_tabs.addTab(self._build_all_items_tab(), "All Items")
+        layout.addWidget(self.right_tabs, stretch=1)
+        return frame
+
+    def _build_current_category_tab(self) -> QWidget:
+        tab = QWidget(self)
+        layout = QVBoxLayout(tab)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(12)
+
+        self.current_category_title = QLabel("Select a category", tab)
         self.current_category_title.setObjectName("panelTitle")
         layout.addWidget(self.current_category_title)
 
-        self.empty_state_label = QLabel("No subcategories yet. Add one to start tracking.", frame)
+        self.empty_state_label = QLabel("No subcategories yet. Add one to start tracking.", tab)
         self.empty_state_label.setObjectName("hintLabel")
         layout.addWidget(self.empty_state_label)
 
-        self.subcategory_table = QTableWidget(0, 7, frame)
+        self.subcategory_table = QTableWidget(0, 7, tab)
         self.subcategory_table.setHorizontalHeaderLabels(
             ["Subcategory", "Count", "-1", "+1", "Rename", "Delete", "Status"]
         )
@@ -130,13 +143,52 @@ class MainWindow(QMainWindow):
 
         button_row = QHBoxLayout()
         button_row.setSpacing(8)
-        self.add_subcategory_button = QPushButton("Add Subcategory", frame)
-        self.bulk_add_subcategory_button = QPushButton("Bulk Add", frame)
+        self.add_subcategory_button = QPushButton("Add Subcategory", tab)
+        self.bulk_add_subcategory_button = QPushButton("Bulk Add", tab)
         button_row.addWidget(self.add_subcategory_button)
         button_row.addWidget(self.bulk_add_subcategory_button)
         button_row.addStretch(1)
         layout.addLayout(button_row)
-        return frame
+        return tab
+
+    def _build_all_items_tab(self) -> QWidget:
+        tab = QWidget(self)
+        layout = QVBoxLayout(tab)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(12)
+
+        self.all_items_title = QLabel("All Categories Overview", tab)
+        self.all_items_title.setObjectName("panelTitle")
+        layout.addWidget(self.all_items_title)
+
+        self.all_items_hint_label = QLabel(
+            "Double-click a row to jump back to that category.",
+            tab,
+        )
+        self.all_items_hint_label.setObjectName("hintLabel")
+        layout.addWidget(self.all_items_hint_label)
+
+        self.all_items_table = QTableWidget(0, 6, tab)
+        self.all_items_table.setHorizontalHeaderLabels(
+            ["Category", "Subcategory", "Count", "-1", "+1", "Status"]
+        )
+        self.all_items_table.verticalHeader().setVisible(False)
+        self.all_items_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.all_items_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.all_items_table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.all_items_table.setAlternatingRowColors(False)
+        self.all_items_table.setShowGrid(False)
+        self.all_items_table.setWordWrap(False)
+        self.all_items_table.setVerticalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
+        self.all_items_table.horizontalHeader().setStretchLastSection(False)
+        self.all_items_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        self.all_items_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        self.all_items_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+        self.all_items_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
+        self.all_items_table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
+        self.all_items_table.horizontalHeader().setSectionResizeMode(5, QHeaderView.ResizeMode.ResizeToContents)
+        layout.addWidget(self.all_items_table, stretch=1)
+        return tab
 
     def _build_bottom_toolbar(self) -> QWidget:
         frame = QWidget(self)
@@ -225,6 +277,23 @@ class MainWindow(QMainWindow):
                 border-bottom: 1px solid #d9dde7;
                 font-weight: 600;
             }
+            QTabWidget::pane {
+                border: none;
+            }
+            QTabBar::tab {
+                background: #eef3fb;
+                color: #31425b;
+                padding: 8px 14px;
+                margin-right: 6px;
+                border: 1px solid #c9d4e3;
+                border-bottom: none;
+                border-top-left-radius: 8px;
+                border-top-right-radius: 8px;
+            }
+            QTabBar::tab:selected {
+                background: #d7e8ff;
+                color: #173b72;
+            }
             QPushButton {
                 background: #eef3fb;
                 color: #21314b;
@@ -245,6 +314,7 @@ class MainWindow(QMainWindow):
     def _connect_signals(self) -> None:
         self.category_list.itemSelectionChanged.connect(self.on_category_selection_changed)
         self.category_list.itemDoubleClicked.connect(lambda _: self.rename_selected_category())
+        self.all_items_table.itemDoubleClicked.connect(self.on_all_items_row_activated)
 
         self.add_category_button.clicked.connect(self.add_category)
         self.rename_category_button.clicked.connect(self.rename_selected_category)
@@ -263,6 +333,7 @@ class MainWindow(QMainWindow):
         self.state.ensure_valid_selection()
         self.refresh_category_list()
         self.refresh_subcategory_table()
+        self.refresh_all_items_table()
         self.update_action_states()
         self.update_window_title()
 
@@ -335,7 +406,8 @@ class MainWindow(QMainWindow):
             self.subcategory_table.setCellWidget(
                 row,
                 2,
-                self._build_row_button(
+                self._build_table_button(
+                    self.subcategory_table,
                     "−",
                     lambda _checked=False, category_id=category.id, item_id=item.id: self.decrement_subcategory(
                         category_id, item_id
@@ -346,7 +418,8 @@ class MainWindow(QMainWindow):
             self.subcategory_table.setCellWidget(
                 row,
                 3,
-                self._build_row_button(
+                self._build_table_button(
+                    self.subcategory_table,
                     "+",
                     lambda _checked=False, category_id=category.id, item_id=item.id: self.increment_subcategory(
                         category_id, item_id
@@ -356,7 +429,8 @@ class MainWindow(QMainWindow):
             self.subcategory_table.setCellWidget(
                 row,
                 4,
-                self._build_row_button(
+                self._build_table_button(
+                    self.subcategory_table,
                     "Rename",
                     lambda _checked=False, category_id=category.id, item_id=item.id: self.rename_subcategory(
                         category_id, item_id
@@ -366,7 +440,8 @@ class MainWindow(QMainWindow):
             self.subcategory_table.setCellWidget(
                 row,
                 5,
-                self._build_row_button(
+                self._build_table_button(
+                    self.subcategory_table,
                     "Delete",
                     lambda _checked=False, category_id=category.id, item_id=item.id: self.delete_subcategory(
                         category_id, item_id
@@ -376,6 +451,132 @@ class MainWindow(QMainWindow):
             self.subcategory_table.setItem(row, 6, badge_item)
 
         self.subcategory_table.verticalScrollBar().setValue(scroll_value)
+
+    def refresh_all_items_table(self) -> None:
+        scroll_value = self.all_items_table.verticalScrollBar().value()
+        self.all_items_table.setRowCount(0)
+
+        if not self.state.categories:
+            self.all_items_hint_label.setText("Create a category first to see the full hierarchy.")
+            return
+
+        self.all_items_hint_label.setText(
+            "Double-click a row to jump back to that category."
+        )
+
+        total_rows = sum(max(1, len(category.items)) for category in self.state.categories)
+        self.all_items_table.setRowCount(total_rows)
+
+        row = 0
+        for category in self.state.categories:
+            lowest_ids = category.lowest_item_ids()
+
+            if not category.items:
+                self._set_overview_row(
+                    row=row,
+                    category_id=category.id,
+                    category_name=category.name,
+                    item_id=None,
+                    subcategory_name="—",
+                    count_text="—",
+                    status_text="No subcategories",
+                    muted=True,
+                )
+                row += 1
+                continue
+
+            for item in category.items:
+                self._set_overview_row(
+                    row=row,
+                    category_id=category.id,
+                    category_name=category.name,
+                    item_id=item.id,
+                    subcategory_name=item.name,
+                    count_text=str(item.count),
+                    status_text="LOWEST" if item.id in lowest_ids else "",
+                    is_lowest=item.id in lowest_ids,
+                )
+                row += 1
+
+        self.all_items_table.verticalScrollBar().setValue(scroll_value)
+
+    def _set_overview_row(
+        self,
+        row: int,
+        category_id: str,
+        category_name: str,
+        item_id: str | None,
+        subcategory_name: str,
+        count_text: str,
+        status_text: str,
+        is_lowest: bool = False,
+        muted: bool = False,
+    ) -> None:
+        category_item = QTableWidgetItem(category_name)
+        subcategory_item = QTableWidgetItem(subcategory_name)
+        count_item = QTableWidgetItem(count_text)
+        status_item = QTableWidgetItem(status_text)
+
+        category_item.setData(Qt.ItemDataRole.UserRole, category_id)
+        subcategory_item.setData(Qt.ItemDataRole.UserRole, item_id)
+        count_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter)
+        status_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter)
+
+        for item in (category_item, subcategory_item, count_item, status_item):
+            item.setFlags(Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable)
+            item.setForeground(QColor("#21314b"))
+
+        if muted:
+            muted_color = QColor("#7a8799")
+            subcategory_item.setForeground(muted_color)
+            count_item.setForeground(muted_color)
+            status_item.setForeground(muted_color)
+
+        if is_lowest:
+            row_background = QColor("#fff4ce")
+            strong_color = QColor("#7b5200")
+            for item in (category_item, subcategory_item, count_item):
+                item.setBackground(row_background)
+                item.setForeground(strong_color)
+            status_item.setBackground(QColor("#ffe29a"))
+            status_item.setForeground(strong_color)
+
+        self.all_items_table.setItem(row, 0, category_item)
+        self.all_items_table.setItem(row, 1, subcategory_item)
+        self.all_items_table.setItem(row, 2, count_item)
+        if item_id is None:
+            self.all_items_table.setItem(row, 3, self._create_empty_overview_action_item())
+            self.all_items_table.setItem(row, 4, self._create_empty_overview_action_item())
+        else:
+            self.all_items_table.setCellWidget(
+                row,
+                3,
+                self._build_table_button(
+                    self.all_items_table,
+                    "−",
+                    lambda _checked=False, category_id=category_id, item_id=item_id: self.decrement_subcategory(
+                        category_id, item_id
+                    ),
+                    enabled=count_text != "0",
+                ),
+            )
+            self.all_items_table.setCellWidget(
+                row,
+                4,
+                self._build_table_button(
+                    self.all_items_table,
+                    "+",
+                    lambda _checked=False, category_id=category_id, item_id=item_id: self.increment_subcategory(
+                        category_id, item_id
+                    ),
+                ),
+            )
+        self.all_items_table.setItem(row, 5, status_item)
+
+    def _create_empty_overview_action_item(self) -> QTableWidgetItem:
+        item = QTableWidgetItem("")
+        item.setFlags(Qt.ItemFlag.ItemIsEnabled)
+        return item
 
     def _apply_lowest_style(
         self,
@@ -408,13 +609,14 @@ class MainWindow(QMainWindow):
         count_item.setForeground(strong_color)
         badge_item.setForeground(strong_color)
 
-    def _build_row_button(
+    def _build_table_button(
         self,
+        table: QTableWidget,
         text: str,
         callback,
         enabled: bool = True,
     ) -> QWidget:
-        container = QWidget(self.subcategory_table)
+        container = QWidget(table)
         layout = QHBoxLayout(container)
         layout.setContentsMargins(4, 4, 4, 4)
         layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -446,6 +648,21 @@ class MainWindow(QMainWindow):
         )
         self.refresh_subcategory_table()
         self.update_action_states()
+
+    def on_all_items_row_activated(self, item: QTableWidgetItem) -> None:
+        category_item = self.all_items_table.item(item.row(), 0)
+        if category_item is None:
+            return
+
+        category_id = category_item.data(Qt.ItemDataRole.UserRole)
+        if not category_id:
+            return
+
+        self.state.selected_category_id = category_id
+        self.refresh_category_list()
+        self.refresh_subcategory_table()
+        self.update_action_states()
+        self.right_tabs.setCurrentIndex(0)
 
     def add_category(self) -> None:
         value, accepted = TextInputDialog.get_value(self, "Add Category", "Category name:")
@@ -530,6 +747,7 @@ class MainWindow(QMainWindow):
             return
 
         self.refresh_subcategory_table()
+        self.refresh_all_items_table()
         self.update_window_title()
         self.statusBar().showMessage(f"Added subcategory: {item.name}", 3000)
 
@@ -569,6 +787,7 @@ class MainWindow(QMainWindow):
             return
 
         self.refresh_subcategory_table()
+        self.refresh_all_items_table()
         self.update_window_title()
         self.statusBar().showMessage(f"Added {len(added_names)} subcategories.", 3000)
 
@@ -608,6 +827,7 @@ class MainWindow(QMainWindow):
             return
 
         self.refresh_subcategory_table()
+        self.refresh_all_items_table()
         self.update_window_title()
         self.statusBar().showMessage(f"Renamed subcategory to: {name}", 3000)
 
@@ -629,17 +849,20 @@ class MainWindow(QMainWindow):
 
         self.state.remove_subcategory(category.id, item.id)
         self.refresh_subcategory_table()
+        self.refresh_all_items_table()
         self.update_window_title()
         self.statusBar().showMessage(f"Deleted subcategory: {item.name}", 3000)
 
     def increment_subcategory(self, category_id: str, item_id: str) -> None:
         self.state.increment_subcategory(category_id, item_id)
         self.refresh_subcategory_table()
+        self.refresh_all_items_table()
         self.update_window_title()
 
     def decrement_subcategory(self, category_id: str, item_id: str) -> None:
         self.state.decrement_subcategory(category_id, item_id)
         self.refresh_subcategory_table()
+        self.refresh_all_items_table()
         self.update_window_title()
 
     def save_file(self) -> bool:
